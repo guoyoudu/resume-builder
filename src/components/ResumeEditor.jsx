@@ -4,24 +4,26 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { pdfjs } from 'react-pdf';
 
 // 设置PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// 使用本地worker文件，避免网络加载问题
+// 注意：项目中有两个版本的pdfjs-dist，需要分别设置worker
+
+// 为了避免网络问题，使用相对路径加载worker文件
+// 在public目录中的worker文件会在构建时被复制到输出目录
+const workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.js`;
+
+// 确保两个PDF库都使用相同的本地worker文件
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+
+console.log('PDF.js worker路径设置为:', workerSrc);
+
+// 使用本地worker文件，确保在开发和生产环境都能正常工作
+
 
 const ResumeEditor = ({ onUpdateData }) => {
   const fileInputRef = useRef(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadError, setUploadError] = useState('');
-  
-  // 从localStorage加载保存的数据
-  useEffect(() => {
-    const savedData = localStorage.getItem('resumeData');
-    if (savedData) {
-      const parsedData = JSON.parse(savedData);
-      setFormData(parsedData);
-      onUpdateData(parsedData);
-    }
-  }, [onUpdateData]);
-
   const [formData, setFormData] = useState({
     name: '',
     title: '',
@@ -37,6 +39,23 @@ const ResumeEditor = ({ onUpdateData }) => {
     experience: [],
     projects: [],
   });
+  
+  // 从localStorage加载保存的数据
+  useEffect(() => {
+    const savedData = localStorage.getItem('resumeData');
+    if (savedData) {
+      const parsedData = JSON.parse(savedData);
+      setFormData(parsedData);
+      // 移除这里的onUpdateData调用，避免无限循环
+    }
+  }, []); // 移除onUpdateData依赖
+
+  // 添加新的useEffect来处理formData更新
+  useEffect(() => {
+    onUpdateData(formData);
+    // 保存到localStorage
+    localStorage.setItem('resumeData', JSON.stringify(formData));
+  }, [formData, onUpdateData]);
   
   // 处理文件上传
   const handleFileUpload = async (e) => {
@@ -87,14 +106,12 @@ const ResumeEditor = ({ onUpdateData }) => {
       fileReader.onload = async (event) => {
         try {
           const typedArray = new Uint8Array(event.target.result);
-          // 添加错误处理和日志
-          console.log('开始加载PDF文档...');
+          console.log('开始加载PDF文档...', file.name, file.size);
           
-          // 使用更安全的方式创建PDF加载任务
+          // 尝试使用更简单的配置
           const loadingTask = pdfjsLib.getDocument({
             data: typedArray,
-            cMapUrl: 'https://unpkg.com/pdfjs-dist/cmaps/',
-            cMapPacked: true,
+            // 不使用cMap配置，避免可能的问题
           });
           
           console.log('PDF加载任务创建成功，等待文档加载...');
@@ -103,26 +120,53 @@ const ResumeEditor = ({ onUpdateData }) => {
           
           let fullText = '';
           
-          // 遍历所有页面并提取文本
+          // 遍历所有页面并提取文本 - 使用更简单的方法
           for (let i = 1; i <= pdf.numPages; i++) {
-            console.log(`正在处理第${i}页...`);
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join(' ');
-            fullText += pageText + '\n';
+            try {
+              console.log(`正在处理第${i}页...`);
+              const page = await pdf.getPage(i);
+              console.log(`成功获取第${i}页`);
+              
+              // 直接使用getTextContent而不做复杂的排序
+              const textContent = await page.getTextContent();
+              console.log(`成功获取第${i}页的文本内容，项目数量:`, textContent.items.length);
+              
+              // 输出前几个项目的详细信息以便调试
+              if (textContent.items.length > 0) {
+                console.log('第一个文本项目:', JSON.stringify(textContent.items[0]));
+              }
+              
+              // 使用简单的方法合并文本
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              console.log(`第${i}页文本长度: ${pageText.length}`);
+              fullText += pageText + '\n';
+            } catch (pageError) {
+              console.error(`处理第${i}页时出错:`, pageError);
+              // 继续处理下一页，不中断整个过程
+            }
           }
           
-          console.log('PDF文本提取完成');
+          console.log('PDF文本提取完成，总长度:', fullText.length);
+          if (fullText.length > 0) {
+            console.log('提取的文本示例:', fullText.substring(0, 200));
+          } else {
+            console.warn('提取的文本为空!');
+            // 如果提取的文本为空，添加一些测试文本
+            fullText = '这是一个测试文本，因为PDF提取失败。请检查PDF文件是否正确。';
+          }
+          
           resolve(fullText);
         } catch (error) {
           console.error('PDF处理错误:', error);
-          reject(new Error(`PDF解析失败: ${error.message}`));
+          // 返回错误信息作为文本，而不是拒绝找理
+          resolve(`PDF解析失败: ${error.message}. 请尝试不同的PDF文件。`);
         }
       };
       
       fileReader.onerror = (error) => {
         console.error('文件读取错误:', error);
-        reject(new Error('文件读取失败'));
+        // 返回错误信息作为文本，而不是拒绝找理
+        resolve('文件读取失败。请检查文件是否有效。');
       };
       
       fileReader.readAsArrayBuffer(file);

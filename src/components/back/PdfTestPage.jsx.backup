@@ -1,0 +1,477 @@
+import React, { useState, useRef, useEffect } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+import { createWorker } from 'tesseract.js';
+
+// 设置PDF.js worker
+// 使用本地worker文件，避免网络依赖问题
+const workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+console.log('PDF.js worker路径设置为:', workerSrc);
+
+const PdfTestPage = () => {
+  const fileInputRef = useRef(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [pdfInfo, setPdfInfo] = useState({
+    fileName: '',
+    previewUrls: [],
+    currentPage: 1,
+    pageCount: 0,
+    extractedText: '',
+    textByPage: [],
+    parsedData: null,
+    processingTime: 0,
+    textExtractionSuccess: false,
+    hasImages: false,
+    ocrProcessing: false,
+    ocrProgress: 0,
+    ocrComplete: false
+  });
+  
+  // 创建Tesseract OCR Worker
+  const [ocrWorker, setOcrWorker] = useState(null);
+  
+  // 初始化OCR Worker
+  useEffect(() => {
+    const initWorker = async () => {
+      try {
+        console.log('开始初始化OCR Worker...');
+        // 创建Worker时不传递logger函数，而是使用事件监听器
+        const worker = await createWorker({
+          // 指定语言数据位置，避免下载延迟
+          langPath: `${process.env.PUBLIC_URL}/tessdata`,
+          // 缓存路径
+          cachePath: `${process.env.PUBLIC_URL}/tessdata_cache`,
+          // 内存限制
+          workerBlobURL: false
+        });
+        
+        // 监听Worker的进度事件
+        worker.progress(progress => {
+          console.log('OCR进度:', progress);
+          if (progress.status === 'recognizing text') {
+            setPdfInfo(prev => ({
+              ...prev,
+              ocrProgress: Math.round(progress.progress * 100)
+            }));
+          }
+        });
+        
+        console.log('开始加载语言数据...');
+        // 加载语言数据，仅使用英文来加快加载速度
+        await worker.loadLanguage('eng');
+        await worker.initialize('eng');
+        console.log('语言数据加载完成');
+        
+        // 设置OCR参数，提高识别质量和速度
+        await worker.setParameters({
+          tessedit_ocr_engine_mode: 3, // 使用神经网络引擎
+          tessedit_pageseg_mode: 1,   // 自动页面分割，更适合扫描文档
+          tessjs_create_hocr: '0',   // 不创建HOCR
+          tessjs_create_tsv: '0',    // 不创建TSV
+          tessjs_create_box: '0',    // 不创建Box
+          tessjs_create_unlv: '0',   // 不创建UNLV
+          tessjs_create_osd: '0',    // 不创建OSD
+          tessjs_create_pdf: '0',    // 不创建PDF
+          // 优化速度的参数
+          tessedit_do_invert: '0',   // 不进行颜色反转
+          textord_heavy_nr: '1',     // 快速处理
+          textord_force_make_prop_words: '0', // 加快处理
+          tessedit_write_images: '0' // 不写入图像
+        });
+        setOcrWorker(worker);
+        console.log('OCR Worker初始化完成');
+      } catch (error) {
+        console.error('初始化OCR Worker失败:', error);
+      }
+    };
+    
+    initWorker();
+    
+    // 组件卸载时终止Worker
+    return () => {
+      if (ocrWorker) {
+        ocrWorker.terminate();
+      }
+    };
+  }, []);
+
+  // 生成PDF预览图像（所有页面）
+  const generatePdfPreview = (file) => {
+    return new Promise((resolve, reject) => {
+      const fileReader = new FileReader();
+      
+      fileReader.onload = async (event) => {
+        try {
+          const arrayBuffer = event.target.result;
+          
+          // 使用PDF.js打开PDF文件
+          const loadingTask = pdfjsLib.getDocument({
+            data: new Uint8Array(arrayBuffer),
+            disableFontFace: false
+          });
+          
+          const pdf = await loadingTask.promise;
+          const totalPages = pdf.numPages;
+          console.log(`PDF总页数: ${totalPages}`);
+          
+          // 预先生成所有页面的预览
+          const previewUrls = [];
+          
+          // 生成所有页面的预览
+          for (let i = 1; i <= totalPages; i++) {
+            const page = await pdf.getPage(i);
+            
+            // 设置渲染参数
+            const viewport = page.getViewport({ scale: 1.5 }); // 缩放比例可以调整
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            
+            // 渲染PDF页面到canvas
+            await page.render({
+              canvasContext: context,
+              viewport: viewport
+            }).promise;
+            
+            // 将canvas转换为图片URL
+            const previewUrl = canvas.toDataURL('image/jpeg', 0.8); // 使用JPEG格式，质量0.8
+            previewUrls.push(previewUrl);
+            console.log(`生成第${i}页预览图像`);
+          }
+          
+          resolve(previewUrls);
+          
+        } catch (error) {
+          console.error('生成PDF预览时出错:', error);
+          reject(error);
+        }
+      };
+      
+      fileReader.onerror = (error) => {
+        console.error('读取文件时出错:', error);
+        reject(error);
+      };
+      
+      fileReader.readAsArrayBuffer(file);
+    });
+  };
+  
+  // 切换预览页面
+  const changePage = (newPage) => {
+    if (newPage >= 1 && newPage <= pdfInfo.pageCount) {
+      setPdfInfo(prev => ({
+        ...prev,
+        currentPage: newPage
+      }));
+    }
+  };
+  
+  // 切换文本显示模式（当前页/全部）
+  const [showAllText, setShowAllText] = useState(false);
+  
+  const toggleTextDisplayMode = () => {
+    setShowAllText(!showAllText);
+  };
+
+  // 处理文件上传
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // 显示文件信息
+    console.log('选择了文件:', file.name, file.type, file.size);
+    
+    // 检查是否为PDF文件
+    if (file.type !== 'application/pdf') {
+      setUploadError('请上传PDF文件');
+      return;
+    }
+    
+    // 设置处理状态
+    setIsProcessing(true);
+    setUploadError('');
+    const startTime = performance.now();
+    
+    // 初始化一个基本的pdfInfo，让用户知道文件已经上传成功
+    setPdfInfo({
+      fileName: file.name,
+      previewUrls: [],
+      currentPage: 1,
+      pageCount: '正在计算...',
+      extractedText: '正在提取文本...',
+      parsedData: null,
+      processingTime: '正在处理...'
+    });
+    
+    // 生成PDF预览图
+    generatePdfPreview(file).then(previewUrls => {
+      setPdfInfo(prev => ({
+        ...prev,
+        previewUrls,
+        pageCount: previewUrls.length // 设置正确的页数
+      }));
+    }).catch(error => {
+      console.error('生成PDF预览失败:', error);
+    });
+    
+    try {
+      // 获取PDF页数 - 这部分现在主要由generatePdfPreview处理
+      // 但我们保留这个逻辑作为备份，以防预览生成失败
+      try {
+        const pageCount = await getPdfPageCount(file);
+        setPdfInfo(prev => ({
+          ...prev,
+          pageCount: prev.pageCount === '正在计算...' ? pageCount : prev.pageCount
+        }));
+      } catch (error) {
+        console.error('获取PDF页数失败:', error);
+        setPdfInfo(prev => ({
+          ...prev,
+          pageCount: prev.pageCount === '正在计算...' ? '未知' : prev.pageCount
+        }));
+      }  
+      // 提取PDF文本
+      console.log('开始提取PDF文本...');
+      const extractionResult = await extractTextFromPDF(file);
+      const extractedText = extractionResult.fullText;
+      const textByPage = extractionResult.textByPage;
+      const textExtractionSuccess = extractionResult.success || false;
+      const needsOcr = extractionResult.needsOcr || false;
+      console.log('提取到的文本长度:', extractedText.length);
+      console.log('按页面分割的文本数量:', textByPage.length);
+      console.log('文本提取成功状态:', textExtractionSuccess);
+      console.log('是否需要OCR:', needsOcr);
+      
+      // 如果提取失败且需要OCR，且OCR Worker已初始化，则尝试OCR处理
+      if (!textExtractionSuccess && needsOcr && ocrWorker) {
+        console.log('开始使用OCR处理PDF...');
+        setPdfInfo(prev => ({
+          ...prev,
+          ocrProcessing: true,
+          ocrProgress: 0
+        }));
+        
+        try {
+          // 使用第一页预览图进行OCR处理
+          if (pdfInfo.previewUrls && pdfInfo.previewUrls.length > 0) {
+            // 初始化为空数组，确保是数组类型
+            let ocrResults = [];
+            const totalPages = pdfInfo.previewUrls.length;
+            let allOcrText = '';
+            
+            // 限制处理页数，如果页数过多，只处理前几页
+            const pagesToProcess = Math.min(totalPages, 3); // 最多处理前3页，加快速度
+            console.log(`将处理${pagesToProcess}页（共${totalPages}页）`);
+            
+            // 逐页OCR处理
+            for (let i = 0; i < pagesToProcess; i++) {
+              setPdfInfo(prev => ({
+                ...prev,
+                ocrProgress: Math.round((i / pagesToProcess) * 100)
+              }));
+              
+              console.log(`OCR处理第${i+1}页，共${pagesToProcess}页...`);
+              
+              try {
+                // 预处理图像，提高OCR质量
+                const imageUrl = pdfInfo.previewUrls[i];
+                
+                // 使用更高级的识别选项
+                console.log(`开始识别第${i+1}页...`);
+                const { data: { text, confidence } } = await ocrWorker.recognize(imageUrl);
+                
+                console.log(`第${i+1}页OCR识别结果，置信度: ${confidence}%，文本长度: ${text.length}`);
+                
+                // 清理识别结果
+                let cleanedText = text
+                  .replace(/\s{2,}/g, ' ')  // 将多个空白字符合并为一个
+                  .replace(/\n\s+/g, '\n')  // 删除行首空白
+                  .trim();
+                
+                ocrResults.push(cleanedText);
+                allOcrText += cleanedText + '\n\n';
+                
+                // 如果识别结果很短或置信度低，尝试再次识别使用不同的参数
+                if (text.length < 50 || confidence < 70) {
+                  console.log(`第${i+1}页识别结果不理想，尝试使用不同参数重新识别...`);
+                  
+                  // 尝试不同的分割模式
+                  await ocrWorker.setParameters({ 
+                    tessedit_pageseg_mode: 4, // 假设单列可变大小文本
+                    textord_tabfind_find_tables: '0' // 不寻找表格，加快处理
+                  });
+                  
+                  console.log(`使用新参数重新识别第${i+1}页...`);
+                  const { data: { text: retryText, confidence: retryConfidence } } = await ocrWorker.recognize(imageUrl);
+                  
+                  console.log(`重新识别结果 - 置信度: ${retryConfidence}%, 文本长度: ${retryText.length}`);
+                  
+                  // 如果重新识别的结果更好，则使用新结果
+                  if (retryText.length > text.length || retryConfidence > confidence) {
+                    console.log(`重新识别成功，获取到更好的结果`);
+                    
+                    // 清理重新识别的文本
+                    let cleanedRetryText = retryText
+                      .replace(/\s{2,}/g, ' ')
+                      .replace(/\n\s+/g, '\n')
+                      .trim();
+                    
+                    ocrResults[i] = cleanedRetryText;
+                    
+                    // 重新构建allOcrText
+                    allOcrText = '';
+                    for (const pageText of ocrResults) {
+                      allOcrText += pageText + '\n\n';
+                    }
+                  }
+                  
+                  // 恢复原始参数
+                  await ocrWorker.setParameters({ 
+                    tessedit_pageseg_mode: 1,
+                    textord_tabfind_find_tables: '1'
+                  });
+                }
+              } catch (pageError) {
+                console.error(`OCR处理第${i+1}页时出错:`, pageError);
+                ocrResults.push(`[无法识别第${i+1}页文本]`);
+              }
+            }
+            
+            // 如果还有更多页面未处理，添加提示
+            if (pagesToProcess < totalPages) {
+              ocrResults.push(`[仅处理了前${pagesToProcess}页，共${totalPages}页]`);
+              allOcrText += `\n\n[仅处理了前${pagesToProcess}页，共${totalPages}页]`;
+            }
+            
+            console.log('OCR处理完成，文本长度:', allOcrText.length);
+            
+            // 清理和格式化OCR提取的文本
+            allOcrText = allOcrText
+              .replace(/\s{2,}/g, ' ')  // 将多个空白字符合并为一个
+              .replace(/\n\s+/g, '\n')  // 删除行首空白
+              .replace(/\n{3,}/g, '\n\n')  // 限制连续空行
+              .trim();
+            
+            // 确保ocrResults是数组
+            if (!Array.isArray(ocrResults)) {
+              console.warn('ocrResults不是数组，创建新数组');
+              ocrResults = [allOcrText];
+            }
+            
+            // 确保ocrResults是数组
+            if (!Array.isArray(ocrResults)) {
+              console.warn('ocrResults不是数组，创建新数组');
+              ocrResults = [allOcrText];
+            }
+            
+            // 更新提取的文本
+            const updatedExtractionResult = {
+              fullText: allOcrText,
+              textByPage: ocrResults,
+              success: allOcrText.length > 50, // 如果OCR提取的文本足够长，则视为成功
+              hasImages: true,
+              ocrProcessed: true
+            };
+            
+            console.log('最终OCR提取文本长度:', allOcrText.length);
+            if (allOcrText.length > 0) {
+              console.log('文本样本:', allOcrText.substring(0, 200));
+            }
+            
+            // 分析OCR提取的文本
+            let ocrParsedData = null;
+            if (updatedExtractionResult.success) {
+              console.log('开始分析OCR提取的文本...');
+              ocrParsedData = analyzeResumeText(allOcrText);
+              console.log('OCR文本分析结果:', ocrParsedData);
+            }
+            
+            // 确保textByPage始终是数组
+            const textByPageArray = Array.isArray(ocrResults) ? ocrResults : [allOcrText];
+            
+            // 更新状态
+            setPdfInfo(prev => ({
+              ...prev,
+              extractedText: allOcrText,
+              textByPage: textByPageArray,
+              textExtractionSuccess: updatedExtractionResult.success,
+              parsedData: ocrParsedData,
+              ocrProcessing: false,
+              ocrComplete: true
+            }));
+        } catch (error) {
+          console.error('OCR处理失败:', error);
+          setPdfInfo(prev => ({
+            ...prev,
+            ocrProcessing: false,
+            ocrComplete: true
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('处理PDF文件时出错:', error);
+      setUploadError(error.message || '处理PDF文件时出错，请重试');
+
+      // 即使出错也更新状态，让用户知道发生了什么
+      setPdfInfo(prev => ({
+        ...prev,
+        extractedText: `错误: ${error.message || '处理PDF文件时出错'}`
+      }));
+    } finally {
+      setIsProcessing(false);
+      // 重置文件输入，以便可以再次上传同一文件
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // ...
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg p-6">
+      {/* ... */}
+
+      {/* 解析结果显示区域 */}
+      {pdfInfo.fileName && (
+        <div className="space-y-4">
+          {/* ... */}
+
+          {/* 原始文本显示区域 - 支持分页显示 */}
+          <div className="p-4 bg-gray-50 rounded-lg">
+            <h3 className="font-semibold mb-2">原始文本</h3>
+
+            {/* ... */}
+
+            <div className="whitespace-pre-wrap break-words bg-white p-4 rounded border border-gray-200 max-h-96 overflow-y-auto">
+              {pdfInfo.extractedText && pdfInfo.extractedText.length > 0 ? (
+                <>
+                  <p className="text-gray-500 mb-2">文本长度: {pdfInfo.extractedText.length} 字符</p>
+
+                  {/* 根据显示模式选择显示内容 */}
+                  {pdfInfo.textExtractionSuccess && showAllText ? (
+                    <div>
+                      <p className="text-blue-600 text-sm mb-2">显示全部文本</p>
+                      <div dangerouslySetInnerHTML={{ __html: pdfInfo.extractedText.replace(/\n/g, '<br/>') }} />
+                    </div>
+                  ) : pdfInfo.textExtractionSuccess && Array.isArray(pdfInfo.textByPage) && pdfInfo.textByPage.length > 0 && pdfInfo.currentPage <= pdfInfo.textByPage.length ? (
+                    <div>
+                      <p className="text-blue-600 text-sm mb-2">当前显示第 {pdfInfo.currentPage} 页文本</p>
+                      <div dangerouslySetInnerHTML={{ __html: pdfInfo.textByPage[pdfInfo.currentPage - 1].replace(/\n/g, '<br/>') }} />
+                    </div>
+                  ) : (
+                    <div dangerouslySetInnerHTML={{ __html: pdfInfo.extractedText.replace(/\n/g, '<br/>') }} />
+                  )}
+                </>
+              ) : '无文本内容'}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default PdfTestPage;

@@ -68,3 +68,13 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+
+PdfTextExtractor.js - 负责PDF文本提取逻辑
+OcrProcessor.js - 处理OCR相关功能
+TextAnalyzer.js - 分析提取的文本内容
+PdfUploader.jsx - 处理文件上传UI
+PdfPreview.jsx - 显示PDF预览
+PdfTextDisplay.jsx - 显示提取的文本
+ParsedDataDisplay.jsx - 显示结构化数据
+PdfTestPage.jsx - 整合所有组件的主组件
