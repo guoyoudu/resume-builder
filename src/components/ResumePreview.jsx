@@ -103,10 +103,17 @@ const ResumePreview = ({ data, template }) => {
       <div data-side="left" className="w-1/3 bg-teal-500 text-white p-6">
         <div className="flex flex-col items-center mb-8">
           <div className="w-32 h-32 rounded-full bg-white mb-4 overflow-hidden">
-            {/* 这里可以放置头像 */}
-            <div className="w-full h-full flex items-center justify-center text-teal-500 text-4xl font-bold">
-              {data.name ? data.name.charAt(0) : ''}
-            </div>
+            {data.avatar ? (
+              <img
+                src={data.avatar}
+                alt="头像"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-teal-500 text-4xl font-bold">
+                {data.name ? data.name.charAt(0) : ''}
+              </div>
+            )}
           </div>
           <h1 className="text-2xl font-bold text-center">{data.name}</h1>
           <p className="text-center mt-2">{data.title}</p>
@@ -167,7 +174,7 @@ const ResumePreview = ({ data, template }) => {
                 <h3 className="font-semibold">{edu.school}</h3>
                 <p className="text-gray-600">{edu.degree}</p>
                 <p className="text-sm text-gray-500">
-                  {edu.startDate} 至 {edu.endDate}
+                  {edu.startDate} 至 {edu.endDate || '今'}
                 </p>
                 <p className="mt-1">{edu.description}</p>
               </div>
@@ -183,7 +190,7 @@ const ResumePreview = ({ data, template }) => {
                 <h3 className="font-semibold">{exp.position}</h3>
                 <p className="text-gray-600">{exp.company}</p>
                 <p className="text-sm text-gray-500">
-                  {exp.startDate} 至 {exp.endDate}
+                  {exp.startDate} 至 {exp.endDate || '今'}
                 </p>
                 <p className="mt-1">{exp.description}</p>
               </div>
@@ -241,7 +248,7 @@ const ResumePreview = ({ data, template }) => {
               <div className="flex justify-between">
                 <h3 className="font-semibold">{exp.company}</h3>
                 <span className="text-sm text-gray-500">
-                  {exp.startDate} - {exp.endDate}
+                  {exp.startDate} - {exp.endDate || '今'}
                 </span>
               </div>
               <p className="text-gray-600">{exp.position}</p>
@@ -259,7 +266,7 @@ const ResumePreview = ({ data, template }) => {
               <div className="flex justify-between">
                 <h3 className="font-semibold">{edu.school}</h3>
                 <span className="text-sm text-gray-500">
-                  {edu.startDate} - {edu.endDate}
+                  {edu.startDate} - {edu.endDate || '今'}
                 </span>
               </div>
               <p className="text-gray-600">{edu.degree}</p>
@@ -291,10 +298,17 @@ const ResumePreview = ({ data, template }) => {
       <div data-side="left" className="w-1/3 bg-green-600 text-white p-6">
         <div className="flex flex-col items-center mb-8">
           <div className="w-32 h-32 rounded-full bg-white mb-4 overflow-hidden">
-            {/* 这里可以放置头像 */}
-            <div className="w-full h-full flex items-center justify-center text-green-600 text-4xl font-bold">
-              {data.name ? data.name.charAt(0) : ''}
-            </div>
+            {data.avatar ? (
+              <img
+                src={data.avatar}
+                alt="头像"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-green-600 text-4xl font-bold">
+                {data.name ? data.name.charAt(0) : ''}
+              </div>
+            )}
           </div>
           <h1 className="text-2xl font-bold text-center">{data.name}</h1>
           <p className="text-center mt-2">{data.title}</p>
@@ -332,7 +346,7 @@ const ResumePreview = ({ data, template }) => {
 
         <div className="mb-6">
           <h2 className="text-xl font-semibold mb-3 border-b border-white pb-1">个人简介</h2>
-          <p className="text-sm">
+          <p className="text-sm whitespace-pre-wrap">
             {data.summary || '请在左侧编辑器添加个人简介'}
           </p>
         </div>
@@ -366,11 +380,11 @@ const ResumePreview = ({ data, template }) => {
                   <div className="flex justify-between items-center mb-2">
                     <h3 className="font-semibold text-lg">{exp.company}</h3>
                     <span className="text-sm text-gray-500">
-                      {exp.startDate} 至 {exp.endDate}
+                      {exp.startDate} 至 {exp.endDate || '今'}
                     </span>
                   </div>
                   <p className="text-gray-700 font-medium">{exp.position}</p>
-                  <p className="mt-2 text-gray-600 leading-relaxed">{exp.description}</p>
+                  <p className="mt-2 text-gray-600 leading-relaxed whitespace-pre-wrap">{exp.description}</p>
                 </div>
               ))}
             </div>
@@ -382,10 +396,40 @@ const ResumePreview = ({ data, template }) => {
             <h2 className="text-xl font-semibold text-green-600 mb-4 border-b border-green-600 pb-2">项目经历</h2>
             <div className="space-y-6">
               {data.projects.map((project, index) => (
-                <div key={index}>
-                  <h3 className="font-semibold text-lg mb-2">{project.name}</h3>
-                  <p className="text-gray-700 font-medium">{project.technologies}</p>
-                  <p className="mt-2 text-gray-600 leading-relaxed">{project.description}</p>
+                <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-semibold text-lg text-green-700">{project.name}</h3>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {project.developmentCycle && (
+                        <div className="bg-yellow-100 text-yellow-800 text-sm font-medium px-3 py-1 rounded-full">
+                          开发周期：{project.developmentCycle}
+                        </div>
+                      )}
+                      {project.projectScale && (
+                        <div className="bg-orange-100 text-orange-800 text-sm font-medium px-3 py-1 rounded-full">
+                          项目规模：{project.projectScale}
+                        </div>
+                      )}
+                      {project.frontendTech && (
+                        <div className="bg-blue-100 text-blue-800 text-sm font-medium px-3 py-1 rounded-full">
+                          前端：{project.frontendTech}
+                        </div>
+                      )}
+                      {project.backendTech && (
+                        <div className="bg-green-100 text-green-800 text-sm font-medium px-3 py-1 rounded-full">
+                          后端：{project.backendTech}
+                        </div>
+                      )}
+                      {project.tools && (
+                        <div className="bg-purple-100 text-purple-800 text-sm font-medium px-3 py-1 rounded-full">
+                          工具：{project.tools}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-gray-600 leading-relaxed whitespace-pre-wrap">{project.description}</p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -401,11 +445,24 @@ const ResumePreview = ({ data, template }) => {
                   <div className="flex justify-between items-center mb-2">
                     <h3 className="font-semibold text-lg">{edu.school}</h3>
                     <span className="text-sm text-gray-500">
-                      {edu.startDate} 至 {edu.endDate}
+                      {edu.startDate} 至 {edu.endDate || '今'}
                     </span>
                   </div>
                   <p className="text-gray-700 font-medium">{edu.degree}</p>
                   <p className="mt-2 text-gray-600 leading-relaxed">{edu.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {data.certificates?.length > 0 && (
+          <div>
+            <h2 className="text-xl font-semibold text-green-600 mb-4 border-b border-green-600 pb-2">证书</h2>
+            <div className="space-y-4">
+              {data.certificates.map((cert, index) => (
+                <div key={index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <h3 className="font-semibold text-lg text-green-700">{cert}</h3>
                 </div>
               ))}
             </div>
@@ -449,7 +506,7 @@ const ResumePreview = ({ data, template }) => {
               <div className="flex justify-between">
                 <h3 className="font-semibold">{exp.company}</h3>
                 <span className="text-sm text-gray-500">
-                  {exp.startDate} - {exp.endDate}
+                  {exp.startDate} - {exp.endDate || '今'}
                 </span>
               </div>
               <p className="text-gray-600">{exp.position}</p>
@@ -467,7 +524,7 @@ const ResumePreview = ({ data, template }) => {
               <div className="flex justify-between">
                 <h3 className="font-semibold">{edu.school}</h3>
                 <span className="text-sm text-gray-500">
-                  {edu.startDate} - {edu.endDate}
+                  {edu.startDate} - {edu.endDate || '今'}
                 </span>
               </div>
               <p className="text-gray-600">{edu.degree}</p>

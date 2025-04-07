@@ -18,6 +18,7 @@ function App() {
     education: [],
     experience: [],
     projects: [],
+    certificates: [], // 添加证书数组
   });
   
   const [activeTemplate, setActiveTemplate] = useState('template1');

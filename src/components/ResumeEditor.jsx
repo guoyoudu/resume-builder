@@ -28,6 +28,7 @@ const ResumeEditor = ({ onUpdateData }) => {
     name: '',
     title: '',
     summary: '', // 添加个人简介字段
+    avatar: '', // 添加头像字段
     contact: {
       email: '',
       phone: '',
@@ -37,7 +38,8 @@ const ResumeEditor = ({ onUpdateData }) => {
     skills: [],
     education: [],
     experience: [],
-    projects: [],
+    projects: [], // 项目数组，每个项目包含前端技术栈、后端技术栈和工具
+    certificates: [], // 证书数组，只包含证书名称
   });
   
   // 从localStorage加载保存的数据
@@ -64,6 +66,31 @@ const ResumeEditor = ({ onUpdateData }) => {
     
     setIsProcessing(true);
     setUploadError('');
+
+    // 检查文件类型是否为图片
+    if (e.target.name === 'avatar') {
+      if (!file.type.startsWith('image/')) {
+        setUploadError('请上传图片文件');
+        setIsProcessing(false);
+        return;
+      }
+
+      // 读取图片文件并转换为base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setFormData(prev => ({
+          ...prev,
+          avatar: event.target.result
+        }));
+        setIsProcessing(false);
+      };
+      reader.onerror = () => {
+        setUploadError('读取图片文件失败');
+        setIsProcessing(false);
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
     
     try {
       let extractedText = '';
@@ -299,7 +326,11 @@ const ResumeEditor = ({ onUpdateData }) => {
       if (projLines.length >= 1) {
         parsedData.projects.push({
           name: projLines[0],
-          technologies: '',
+          developmentCycle: '',
+          projectScale: '',
+          frontendTech: '',
+          backendTech: '',
+          tools: '',
           description: projLines.slice(1).join('\n')
         });
       }
@@ -441,6 +472,42 @@ const ResumeEditor = ({ onUpdateData }) => {
 
   return (
     <div className="p-4 bg-white rounded shadow">
+      {/* 头像上传区域 */}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold mb-2">上传头像</h2>
+        <div className="flex items-center space-x-4">
+          <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-200">
+            {formData.avatar ? (
+              <img
+                src={formData.avatar}
+                alt="头像预览"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-400">
+                <span>无头像</span>
+              </div>
+            )}
+          </div>
+          <div>
+            <input
+              type="file"
+              name="avatar"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
+              id="avatar-upload"
+            />
+            <label
+              htmlFor="avatar-upload"
+              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 cursor-pointer inline-block"
+            >
+              选择图片
+            </label>
+          </div>
+        </div>
+      </div>
+
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold">编辑简历信息</h2>
         <button
@@ -793,7 +860,7 @@ const ResumeEditor = ({ onUpdateData }) => {
         </div>
         {formData.projects.map((project, index) => (
           <div key={index} className="mb-4 p-3 border rounded">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">项目名称</label>
                 <input
@@ -803,12 +870,55 @@ const ResumeEditor = ({ onUpdateData }) => {
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                 />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">项目开发周期</label>
+                  <input
+                    type="text"
+                    value={project.developmentCycle || ''}
+                    onChange={(e) => handleChange(e, 'projects', index, 'developmentCycle')}
+                    placeholder="例如：3个月"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">项目规模</label>
+                  <input
+                    type="text"
+                    value={project.projectScale || ''}
+                    onChange={(e) => handleChange(e, 'projects', index, 'projectScale')}
+                    placeholder="例如：5人团队"
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">技术栈</label>
+                <label className="block text-sm font-medium text-gray-700">前端技术栈</label>
                 <input
                   type="text"
-                  value={project.technologies || ''}
-                  onChange={(e) => handleChange(e, 'projects', index, 'technologies')}
+                  value={project.frontendTech || ''}
+                  onChange={(e) => handleChange(e, 'projects', index, 'frontendTech')}
+                  placeholder="如：React, Vue, Angular等"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">后端技术栈</label>
+                <input
+                  type="text"
+                  value={project.backendTech || ''}
+                  onChange={(e) => handleChange(e, 'projects', index, 'backendTech')}
+                  placeholder="如：Node.js, Python, Java等"
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">开发工具</label>
+                <input
+                  type="text"
+                  value={project.tools || ''}
+                  onChange={(e) => handleChange(e, 'projects', index, 'tools')}
+                  placeholder="如：Git, Docker, VS Code等"
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                 />
               </div>
@@ -830,6 +940,61 @@ const ResumeEditor = ({ onUpdateData }) => {
               >
                 删除
               </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 证书编辑区域 */}
+      <div className="mb-6 bg-white rounded-lg shadow p-6">
+        <h2 className="text-xl font-semibold mb-4 flex justify-between items-center">
+          <span>证书</span>
+          <button
+            onClick={() => {
+              setFormData(prev => ({
+                ...prev,
+                certificates: [
+                  ...prev.certificates,
+                  ''
+                ]
+              }));
+            }}
+            className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+          >
+            添加证书
+          </button>
+        </h2>
+
+        {formData.certificates.map((cert, index) => (
+          <div key={index} className="mb-4 p-4 border rounded relative">
+            <button
+              onClick={() => {
+                setFormData(prev => ({
+                  ...prev,
+                  certificates: prev.certificates.filter((_, i) => i !== index)
+                }));
+              }}
+              className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+            >
+              ✕
+            </button>
+
+            <div className="grid gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  证书名称
+                </label>
+                <input
+                  type="text"
+                  value={cert}
+                  onChange={(e) => {
+                    const newCertificates = [...formData.certificates];
+                    newCertificates[index] = e.target.value;
+                    setFormData(prev => ({ ...prev, certificates: newCertificates }));
+                  }}
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-green-500"
+                />
+              </div>
             </div>
           </div>
         ))}
